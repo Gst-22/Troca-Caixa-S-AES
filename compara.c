@@ -15,14 +15,23 @@
 
 #define AES_BLOCK_SIZE 16
 
-void encrypt_modified_AES(FILE* input, FILE* output, uint8_t *w) {
+void encrypt_modified_AES(FILE* input, FILE* output, uint8_t *w, int key_size) {
 
 	uint8_t in[16];
 	uint8_t out[16];
-	
+	int Nr = 0;
+
+	switch(key_size / 8)
+	{
+	case 16: Nr = 10; break;
+	case 24: Nr = 12; break;
+	case 32: Nr = 14; break;
+	default:
+	}
+
 	unsigned char count;
 	while ((count = fread(&in, 1, 16, input)) == 16) {
-		aes_cipher(in, out, w);
+		aes_cipher(in, out, w, Nr);
 		fwrite(out, 1, 16, output);
 	}
 	
@@ -33,18 +42,29 @@ void encrypt_modified_AES(FILE* input, FILE* output, uint8_t *w) {
 		in[i] = 88;
 	}
 
-	aes_cipher(in, out, w);
+	aes_cipher(in, out, w, Nr);
 	fwrite(out, 1, 16, output);
 
 }
 
-void decrypt_modified_AES(FILE* input, FILE* output, uint8_t *w) {
+void decrypt_modified_AES(FILE* input, FILE* output, uint8_t *w, int key_size) {
 
 	uint8_t in[16];
 	uint8_t out[16];
+	int Nr;	
 	
+	switch(key_size / 8)
+	{
+	case 16: Nr = 10; break;
+	case 24: Nr = 12; break;
+	case 32: Nr = 14; break;
+	default:
+	}
+
+
+
 	while (fread(&in, 1, 16, input) == 16) {
-		aes_inv_cipher(in, out, w);
+		aes_inv_cipher(in, out, w, Nr);
 		fwrite(out, 1, 16, output);
 	}
 
@@ -106,7 +126,7 @@ int main(int argc, char *argv[]) {
 				key_file_name = optarg;
 				break;
 			case 's':
-				key_size = atoi(optarg) / 8;
+				key_size = atoi(optarg);
 				break;
 			case 'i':
 				input_file_name = optarg;
@@ -121,30 +141,31 @@ int main(int argc, char *argv[]) {
 	FILE* input = fopen(input_file_name, "rb");
 	FILE* key_file = fopen(key_file_name, "rb");
 
+
 	uint8_t key_m[key_size / 8];
 	uint8_t key_o[key_size / 8];
+
 
 	uint8_t iv[AES_BLOCK_SIZE];
 	uint8_t *w;
 	
-	fread(&key_m, 1, key_size, key_file);
+	fread(&key_m, 1, key_size / 8, key_file);
 	
 	w = aes_init(sizeof(key_m));
-	
-	aes_key_expansion(key_m, w);
+	aes_key_expansion(key_m, key_size, w);
 
 	if (!RAND_bytes(key_o, sizeof(key_o)) || !RAND_bytes(iv, sizeof(iv))) {
         fprintf(stderr, "Erro ao gerar chave ou IV\n");
         return 1;
     }
-	
-//+++++++++++++++++= ENCRIPTANDO ++++================
+
+//+++++++++++++++++= EN	CRIPTANDO ++++================
 	
 	printf("Encriptando:\n");
 
-	FILE* ecrpt_modificado = fopen("encriptado_A", "wb+");
+	FILE* ecrpt_modificado = fopen("saidas/encriptado_A", "wb+");
 	tempo = clock();
-	encrypt_modified_AES(input, ecrpt_modificado, w);
+	encrypt_modified_AES(input, ecrpt_modificado, w, key_size);
 	tempo = clock() - tempo;
 	printf("Tempo do AES modificado: %f\n", ((double)tempo)/CLOCKS_PER_SEC);
 
@@ -162,7 +183,7 @@ int main(int argc, char *argv[]) {
 	tempo = clock() - tempo;
 	printf("Tempo do OpenSSL: %f\n", ((double)tempo)/CLOCKS_PER_SEC);
 
-	FILE* ecrpt_Openssl = fopen("encriptado_B", "wb+");
+	FILE* ecrpt_Openssl = fopen("saidas/encriptado_B", "wb+");
 	fwrite(ciphertext, 1, ciphertext_len, ecrpt_Openssl);
 	fclose(ecrpt_Openssl);
 
@@ -173,9 +194,9 @@ int main(int argc, char *argv[]) {
 	
 	printf("\nDecriptando:\n");
 
-	FILE* dcrpt_modificado = fopen("decriptado_A", "wb");
+	FILE* dcrpt_modificado = fopen("saidas/decriptado_A", "wb");
 	tempo = clock();
-	decrypt_modified_AES(ecrpt_modificado, dcrpt_modificado, w);
+	decrypt_modified_AES(ecrpt_modificado, dcrpt_modificado, w, key_size);
 	tempo = clock() - tempo;
 	printf("Tempo do AES modificado: %f\n", ((double)tempo)/CLOCKS_PER_SEC);
 	fclose(dcrpt_modificado);
@@ -188,7 +209,7 @@ int main(int argc, char *argv[]) {
 	printf("Tempo do OpenSSL: %f\n", ((double)tempo)/CLOCKS_PER_SEC);
 	decryptedtext[decryptedtext_len] = '\0';
 	
-	FILE* dcrpt_Openssl = fopen("decriptado_B", "wb");
+	FILE* dcrpt_Openssl = fopen("saidas/decriptado_B", "wb");
 	fwrite(decryptedtext, 1, decryptedtext_len, dcrpt_Openssl);
 	fclose(dcrpt_Openssl);
 	
